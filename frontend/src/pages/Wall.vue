@@ -32,8 +32,15 @@ const err = ref('')
 async function load() { rows.value = await api('/wishes') }
 async function fulfill(w) {
   err.value = ''
-  try { await api('/wishes/'+w.id+'/fulfill', { method:'POST', body:'{}' }); w.status = 'fulfilled' }
-  catch (e) { err.value = e.message; w.status = 'fulfilled' }
+  try {
+    await api('/wishes/'+w.id+'/fulfill', { method:'POST', body:'{}' })
+  } catch (e) {
+    // 窗外核销服务端不改状态；以服务端数据重拉，杜绝本地残留“半核销”
+    err.value = e.message
+    await load()
+    return
+  }
+  await load()
 }
 onMounted(load)
 </script>

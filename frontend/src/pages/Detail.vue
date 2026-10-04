@@ -28,8 +28,10 @@ const props = defineProps({ id: String })
 const w = ref({})
 const claimer = ref('访客')
 const err = ref('')
+// 可否核销与墙面同源：服务端按行快照投影的 pickup_state，不读浏览器本地钟
 const fulfillBlocked = computed(() =>
-  w.value.status === 'claimed' && false)
+  w.value.status === 'claimed' &&
+  (!w.value.pickup_state || !w.value.pickup_state.is_open))
 async function load() { w.value = await api('/wishes/' + props.id) }
 async function claim() {
   err.value=''; try { await api('/wishes/'+props.id+'/claim',{method:'POST',body:JSON.stringify({claimer:claimer.value})}); await load() } catch(e){ err.value=e.message }
