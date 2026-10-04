@@ -28,8 +28,10 @@ const props = defineProps({ id: String })
 const w = ref({})
 const claimer = ref('访客')
 const err = ref('')
+// 与墙面、后端同一套：仅 claimed 行按发愿时固化的行内快照判定；
+// 无快照的旧行不卡窗。本地钟只作展示，可否核销以服务端 is_open 为准。
 const fulfillBlocked = computed(() =>
-  w.value.status === 'claimed' && false)
+  w.value.status === 'claimed' && !!w.value.pickup_state && !w.value.pickup_state.is_open)
 async function load() { w.value = await api('/wishes/' + props.id) }
 async function claim() {
   err.value=''; try { await api('/wishes/'+props.id+'/claim',{method:'POST',body:JSON.stringify({claimer:claimer.value})}); await load() } catch(e){ err.value=e.message }

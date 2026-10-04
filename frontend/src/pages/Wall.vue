@@ -18,7 +18,7 @@
         </div>
         <span class="tag">{{ w.status }} · {{ w.data_quality }}</span>
         <button v-if="w.status==='claimed'" class="mini"
-                :disabled="!w.pickup_state || !w.pickup_state.is_open"
+                :disabled="!!w.pickup_state && !w.pickup_state.is_open"
                 @click.stop="fulfill(w)">核销完成</button>
       </article>
     </div>
@@ -29,11 +29,19 @@ import { ref, onMounted } from 'vue'
 import { api } from '../api'
 const rows = ref([])
 const err = ref('')
-async function load() { rows.value = await api('/wishes') }
+async function load() { err.value = ''; rows.value = await api('/wishes') }
 async function fulfill(w) {
   err.value = ''
-  try { await api('/wishes/'+w.id+'/fulfill', { method:'POST', body:'{}' }); w.status = 'fulfilled' }
-  catch (e) { err.value = e.message; w.status = 'fulfilled' }
+  try {
+    await api('/wishes/'+w.id+'/fulfill', { method:'POST', body:'{}' })
+  } catch (e) {
+    // 窗外等失败时后端零写入：以服务端数据重刷，行必须仍是 claimed，
+    // 按钮回到快照判定的灰/亮，不得在本地留下半核销。
+    err.value = e.message
+    await load()
+    return
+  }
+  await load()
 }
 onMounted(load)
 </script>

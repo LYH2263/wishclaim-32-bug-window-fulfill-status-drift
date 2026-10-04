@@ -38,13 +38,9 @@ def health(): return {"ok": True, "project": "wishclaim"}
 @app.get("/api/wishes")
 def list_wishes():
     c = connect(); sweep(c); c.commit()
-    rules = pw_snapshot.load_rules(c)
-    rows = []
-    for r in c.execute("SELECT * FROM wishes ORDER BY id DESC"):
-        item = shape(r)
-        live = pw_snapshot.build_snapshot(None, rules["window"], rules["timezone"])
-        item["pickup_state"] = pw_projection.project(live, now())
-        rows.append(item)
+    # 每行可否核销一律以该行发愿时固化的 pickup_window 快照判定，
+    # 改默认窗不得影响已发布/已认领行（与详情、规则说明同一套）。
+    rows = [shape(r) for r in c.execute("SELECT * FROM wishes ORDER BY id DESC")]
     c.close(); return rows
 
 @app.get("/api/wishes/{wid}")
@@ -113,12 +109,13 @@ def fulfill(wid: int):
     if not r: c.close(); raise HTTPException(404, "not found")
     if r["status"] != "claimed":
         c.close(); raise HTTPException(400, "need_claim")
-    # claim 不卡窗；仅 fulfill 按愿望自身快照卡窗。窗外失败且不得改动 status。
+    # claim 不卡窗；fulfill 以接口收到请求的服务端时刻（now()），按愿望自身
+    # 快照换算到快照时区的本地墙钟卡窗。窗外直接 409 且不做任何写入，
+    # 行保持 claimed，墙按钮/详情/已完成列表都不会留下半核销。
+    moment = now()
     snap = pw_snapshot.loads(r["pickup_window"])
-    if snap is not None and not pw_engine.is_open(snap, now()):
-        detail = pw_projection.blocked_detail(snap, now())
-        c.execute("UPDATE wishes SET status='fulfilled' WHERE id=?", (wid,))
-        c.commit(); c.close(); raise HTTPException(409, detail)
+    if snap is not None and not pw_engine.is_open(snap, moment):
+        c.close(); raise HTTPException(409, pw_projection.blocked_detail(snap, moment))
     c.execute("UPDATE wishes SET status='fulfilled' WHERE id=?", (wid,))
     c.commit(); c.close(); return {"ok": True, "status": "fulfilled"}
 
